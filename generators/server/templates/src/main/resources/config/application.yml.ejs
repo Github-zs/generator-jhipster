@@ -112,10 +112,11 @@ management:
         web:
             base-path: /management
             exposure:
-                include: ["configprops", "env", "health", "info", "threaddump", "logfile", "jhimetrics", "prometheus" ]
+                include: ["configprops", "env", "health", "info", "jhimetrics", "logfile", "loggers", "prometheus", "threaddump"]
     endpoint:
         health:
             show-details: when-authorized
+            roles: "ROLE_ADMIN"
         jhimetrics:
             enabled: true
     info:
@@ -199,6 +200,15 @@ spring:
     mvc:
         favicon:
             enabled: false
+    <%_ if (skipUserManagement && ['monolith', 'gateway'].includes(applicationType) && !['oauth2','uaa'].includes(authenticationType)) { _%>
+    security:
+        user:
+            name: admin
+            password: admin
+            roles:
+                - ADMIN
+                - USER
+    <%_ } _%>
     task:
         execution:
             thread-name-prefix: <%= dasherizedBaseName %>-task-
@@ -212,6 +222,9 @@ spring:
                 size: 2
     thymeleaf:
         mode: HTML
+    output:
+        ansi:
+          console-available: true
 <%_ if (authenticationType === 'oauth2') { _%>
     security:
         oauth2:
@@ -290,7 +303,26 @@ jhipster:
         contact-email:
         license:
         license-url:
-
+    <%_ if (authenticationType === 'oauth2') { _%>
+    security:
+        oauth2:
+            audience:
+                - account
+                - api://default
+    <%_ } _%>
+<%_ if (messageBroker === 'kafka') { _%>
+kafka:
+  consumer:
+    key.deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    value.deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    bootstrap.servers: localhost:9092
+    group.id: <%= dasherizedBaseName %>
+    auto.offset.reset: earliest
+  producer:
+    key.serializer: org.apache.kafka.common.serialization.StringSerializer
+    value.serializer: org.apache.kafka.common.serialization.StringSerializer
+    bootstrap.servers: localhost:9092
+<%_ } _%>
 # ===================================================================
 # Application specific properties
 # Add your own application properties here, see the ApplicationProperties class

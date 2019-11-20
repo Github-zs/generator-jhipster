@@ -58,15 +58,9 @@ const updateDeploymentState = importState =>
  * Imports the Applications and Entities defined in JDL
  * The app .yo-rc.json files and entity json files are written to disk
  */
-function importJDL() {
+function importJDL(jdlImporter) {
     logger.info('The JDL is being parsed.');
-    const jdlImporter = new jhiCore.JDLImporter(this.jdlFiles, {
-        databaseType: this.prodDatabaseType,
-        applicationType: this.applicationType,
-        applicationName: this.baseName,
-        generatorVersion: packagejs.version,
-        forceNoFiltering: this.options.force
-    });
+
     let importState = {
         exportedEntities: [],
         exportedApplications: [],
@@ -186,6 +180,7 @@ const generateEntityFiles = (generator, entity, inFolder, env, shouldTriggerInst
         'skip-server': entity.skipServer,
         'no-fluent-methods': entity.noFluentMethod,
         'skip-user-management': entity.skipUserManagement,
+        'skip-db-changelog': generator.options['skip-db-changelog'],
         'skip-ui-grouping': generator.options['skip-ui-grouping']
     };
     const command = `${CLI_NAME}:entity ${entity.name}`;
@@ -225,7 +220,7 @@ const generateEntityFiles = (generator, entity, inFolder, env, shouldTriggerInst
             command,
             {
                 ...options,
-                force: !options.interactive,
+                force: options.force || !options.interactive,
                 'skip-install': !shouldTriggerInstall
             },
             done
@@ -248,27 +243,24 @@ const shouldTriggerInstall = (generator, index) =>
 const isAllCompleted = items => Object.values(items).every(it => it);
 
 class JDLProcessor {
-    constructor(jdlFiles, options) {
-        logger.debug(`JDLProcessor started with jdlFiles: ${jdlFiles} and options: ${toString(options)}`);
+    constructor(jdlFiles, jdlContent, options) {
+        logger.debug(
+            `JDLProcessor started with ${jdlContent ? `content: ${jdlContent}` : `files: ${jdlFiles}`} and options: ${toString(options)}`
+        );
         this.jdlFiles = jdlFiles;
+        this.jdlContent = jdlContent;
         this.options = options;
         this.pwd = process.cwd();
-    }
-
-    validate() {
-        if (this.jdlFiles) {
-            this.jdlFiles.forEach(key => {
-                if (!shelljs.test('-f', key)) {
-                    logger.error(chalk.red(`\nCould not find ${key}, make sure the path is correct.\n`));
-                }
-            });
-        }
     }
 
     getConfig() {
         if (jhiCore.FileUtils.doesFileExist('.yo-rc.json')) {
             logger.info('Found .yo-rc.json on path. This is an existing app');
             const configuration = jhipsterUtils.getAllJhipsterConfig(null, true);
+            if (_.isUndefined(this.options.interactive)) {
+                logger.debug('Setting interactive true for existing apps');
+                this.options.interactive = true;
+            }
             this.applicationType = configuration.applicationType;
             this.baseName = configuration.baseName;
             this.databaseType = configuration.databaseType || jhipsterUtils.getDBTypeFromDBValue(this.options.db);
@@ -289,7 +281,21 @@ class JDLProcessor {
     }
 
     importJDL() {
-        this.importState = importJDL.call(this);
+        const configuration = {
+            databaseType: this.prodDatabaseType,
+            applicationType: this.applicationType,
+            applicationName: this.baseName,
+            generatorVersion: packagejs.version,
+            forceNoFiltering: this.options.force
+        };
+        const JDLImporter = jhiCore.jdl.import.JDLImporter;
+        let importer;
+        if (this.jdlContent) {
+            importer = JDLImporter.createImporterFromContent(this.jdlContent, configuration);
+        } else {
+            importer = JDLImporter.createImporterFromFiles(this.jdlFiles, configuration);
+        }
+        this.importState = importJDL.call(this, importer);
     }
 
     sendInsight() {
@@ -426,6 +432,16 @@ class JDLProcessor {
     }
 }
 
+const validateFiles = jdlFiles => {
+    if (jdlFiles) {
+        jdlFiles.forEach(key => {
+            if (!shelljs.test('-f', key)) {
+                logger.error(chalk.red(`\nCould not find ${key}, make sure the path is correct.\n`));
+            }
+        });
+    }
+};
+
 /**
  * Import-JDL sub generator
  * @param {any} args arguments passed for import-jdl
@@ -436,12 +452,15 @@ class JDLProcessor {
 module.exports = (args, options, env, forkProcess = fork) => {
     logger.debug('cmd: import-jdl from ./import-jdl');
     logger.debug(`args: ${toString(args)}`);
-    const jdlFiles = getOptionsFromArgs(args);
-    logger.info(chalk.yellow(`Executing import-jdl ${jdlFiles.join(' ')}`));
-    logger.info(chalk.yellow(`Options: ${toString(options)}`));
+    let jdlFiles = [];
+    if (!options.inline) {
+        jdlFiles = getOptionsFromArgs(args);
+        validateFiles(jdlFiles);
+    }
+    logger.info(chalk.yellow(`Executing import-jdl ${options.inline ? 'with inline content' : jdlFiles.join(' ')}`));
+    logger.info(chalk.yellow(`Options: ${toString({ ...options, inline: options.inline ? 'inline content' : '' })}`));
     try {
-        const jdlImporter = new JDLProcessor(jdlFiles, options);
-        jdlImporter.validate();
+        const jdlImporter = new JDLProcessor(jdlFiles, options.inline, options);
         jdlImporter.getConfig();
         jdlImporter.importJDL();
         jdlImporter.sendInsight();

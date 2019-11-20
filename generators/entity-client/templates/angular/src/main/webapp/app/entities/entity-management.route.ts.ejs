@@ -18,24 +18,19 @@
 -%>
 import { Injectable } from '@angular/core';
 import { HttpResponse } from '@angular/common/http';
-import { Resolve, ActivatedRouteSnapshot, RouterStateSnapshot, Routes } from '@angular/router';
+import { Resolve, ActivatedRouteSnapshot, Routes } from '@angular/router';
 <%_ if (pagination === 'pagination' || pagination === 'pager') { _%>
-import { JhiPaginationUtil, JhiResolvePagingParams } from 'ng-jhipster';
+import { JhiResolvePagingParams } from 'ng-jhipster';
 <%_ } _%>
-import { UserRouteAccessService } from 'app/core';
+import { UserRouteAccessService } from 'app/core/auth/user-route-access-service';
 import { Observable, of } from 'rxjs';
-import { filter, map } from 'rxjs/operators';
+import { map } from 'rxjs/operators';
 import { <%= entityAngularName %> } from 'app/shared/model/<%= entityModelFileName %>.model';
 import { <%= entityAngularName %>Service } from './<%= entityFileName %>.service';
 import { <%= entityAngularName %>Component } from './<%= entityFileName %>.component';
 import { <%= entityAngularName %>DetailComponent } from './<%= entityFileName %>-detail.component';
+<%_ if (!readOnly) { _%>
 import { <%= entityAngularName %>UpdateComponent } from './<%= entityFileName %>-update.component';
-<%_ if (entityFileName.length <= 30) { _%>
-import { <%= entityAngularName %>DeletePopupComponent } from './<%= entityFileName %>-delete-dialog.component';
-<%_ } else { _%>
-import {
-    <%= entityAngularName %>DeletePopupComponent
-} from './<%= entityFileName %>-delete-dialog.component';
 <%_ } _%>
 import { I<%= entityAngularName %> } from 'app/shared/model/<%= entityModelFileName %>.model';
 
@@ -45,11 +40,10 @@ export class <%= entityAngularName %>Resolve implements Resolve<I<%= entityAngul
     constructor(private service: <%= entityAngularName %>Service) {
     }
 
-    resolve(route: ActivatedRouteSnapshot, state: RouterStateSnapshot): Observable<I<%= entityAngularName %>> {
-        const id = route.params['id'] ? route.params['id'] : null;
+    resolve(route: ActivatedRouteSnapshot): Observable<I<%= entityAngularName %>> {
+        const id = route.params['id'];
         if (id) {
             return this.service.find(id).pipe(
-                filter((response: HttpResponse<<%= entityAngularName %>>) => response.ok),
                 map((<%= entityInstance %>: HttpResponse<<%= entityAngularName %>>) => <%= entityInstance %>.body)
             );
         }
@@ -87,6 +81,7 @@ export const <%= entityInstance %>Route: Routes = [
         },
         canActivate: [UserRouteAccessService]
     },
+    <%_ if (!readOnly) { _%>
     {
         path: 'new',
         component: <%= entityAngularName %>UpdateComponent,
@@ -111,20 +106,5 @@ export const <%= entityInstance %>Route: Routes = [
         },
         canActivate: [UserRouteAccessService]
     },
-];
-
-export const <%= entityInstance %>PopupRoute: Routes = [
-    {
-        path: ':id/delete',
-        component: <%= entityAngularName %>DeletePopupComponent,
-        resolve: {
-            <%= entityInstance %>: <%= entityAngularName %>Resolve
-        },
-        data: {
-            authorities: ['ROLE_USER'],
-            pageTitle: <% if (enableTranslation){ %>'<%= angularAppName %>.<%= entityTranslationKey %>.home.title'<% }else{ %>'<%= entityClassPlural %>'<% } %>
-        },
-        canActivate: [UserRouteAccessService],
-        outlet: 'popup'
-    }
+    <%_ } _%>
 ];
